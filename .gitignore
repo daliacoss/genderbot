@@ -1,2 +1,4 @@
 venv
 *.ini
+*.pyc
+notes.txt

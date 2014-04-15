@@ -1,6 +1,7 @@
 #!/usr/bin/env 
 
-import os, ConfigParser, zulip, sqlalchemy
+import os, ConfigParser, zulip, models
+from sqlalchemy import create_engine
 
 class Message(object):
 	def __init__(self, mtype, content, to, subject):
@@ -19,18 +20,23 @@ class Message(object):
 		}
 
 class GenderBot(object):
-	commands = {
-		"get": getPronouns,
-		"set": setPronouns,
-		"invite": invite,
-		"add": addPronouns,
-		"delete": deletePronouns,
-		"prefer": preferPronouns
-	}
 
 	def __init__(self, client, uri):
 		self.client = client
 		self.uri = uri
+		self.initDB(models.Base)
+		self.commands = {
+			"get": self.getPronouns,
+			"set": self.setPronouns,
+			"invite": self.invite,
+			"add": self.addPronouns,
+			"delete": self.deletePronouns,
+			"prefer": self.preferPronouns
+		}
+
+	def initDB(self, dBaseClass):
+		self.engine = create_engine(self.uri)
+		dBaseClass.metadata.create_all(self.engine)
 
 	def run(self):
 		"""run the GenderBot presumably forever (blocking)"""
@@ -56,13 +62,18 @@ class GenderBot(object):
 			command = content
 			argstring = ""
 
-		return commandSet[command](argstring, sender)
+		f = commandSet.get(command)
+		if f == None:
+			return self.genericMessage(sender)
+		else:
+			return f(argstring, sender)
 
 	def getPronouns(self, argstring, sender):
 		if argstring == "":
 			user = sender
 		else:
 			user = argstring
+
 
 def loadConfig(*fnames):
 	"""
@@ -90,7 +101,7 @@ def configSectionVals(fname, fallback, section, options):
 	config = loadConfig(fallback, fname)
 	vals = {}
 	for op in options:
-		vals[op] = config.get(section, op)
+		vals[op] = config.get(section, op).strip('"')
 	return vals
 
 def main():
