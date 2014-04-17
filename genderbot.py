@@ -116,19 +116,27 @@ class GenderBot(object):
 			fullString = prefixes[1] + " pronouns are" + pronounStrings[0]
 		else:
 			fullString = prefixes[1] + " pronouns are:\n" + "\n".join(
-				[str(i) + p for i, p in enumerate(pronounStrings)])
+				[str(i+1) + p for i, p in enumerate(pronounStrings)])
 		return fullString 
 
-	def setPronouns(self, argstring, sender):
+	def setPronouns(self, argstring, sender, add=False):
 		"""set the user's pronouns"""
 
-		usage = "Usage:\n"\
-			"`set [INDEX] <nominative>, <oblique>, <determiner>, <possessive>, <reflexive>`\n"\
-			"Example: `set they, them, their, theirs, themselves`\n"\
-			"INDEX is only required if you have added more than one pronoun set."
+		if not add:
+			usage = "Usage:\n"\
+				"`set [INDEX] <nominative>, <oblique>, <determiner>, <possessive>, <reflexive>`\n"\
+				"Example: `set they, them, their, theirs, themselves`\n"\
+				"INDEX is only required if you have added more than one pronoun set."
+		else:
+			usage = "Usage:\n"\
+				"`add [INDEX] <nominative>, <oblique>, <determiner>, <possessive>, <reflexive>`\n"\
+				"Example: `set they, them, their, theirs, themselves`\n"
 		args = argstring.split(", ")
+		index = 0
 		if argstring in ["", "--help"]:
 			return usage
+		elif len(args) < 5:
+			return "Error: 5 pronouns required. " + usage
 		#check if pronoun_set index is specified
 		elif args[0][0].isdigit():
 			try:
@@ -142,10 +150,17 @@ class GenderBot(object):
 		user = self.getUser(sender, True)
 		pronounSets = self.getUserPronounSets(user.id) #will be in order of user_id
 		l = len(pronounSets)
+
 		ps = models.UserPronounSet(
 			user.id, False,1,args[0],args[1],args[2],args[3],args[4]
 		)
-		if l <= 1:
+
+		#if add is true, we will simply append to the table
+		if add:
+			ps.relative_index = l
+			self.session.add(ps)
+			self.session.commit()
+		elif l <= 1:
 			if l:
 				pronounSets[0] = ps
 			else:
@@ -154,7 +169,7 @@ class GenderBot(object):
 		elif index < 1:
 			return "Error: You have multiple pronoun sets. Please specify an index.\n"\
 				+ self.getPronouns("", sender)
-		elif index > l:
+		elif index >= l:
 			return "Error: Invalid index." + self.getPronouns("", sender)
 		else:
 			ps.relative_index = index
@@ -189,13 +204,7 @@ class GenderBot(object):
 			return "Error: User not recognized."
 
 	def addPronouns(self, argstring, sender):
-		user = self.getUser(sender, True)
-		pronounSets = self.getUserPronounSets(user.id)
-		l = len(pronounSets)
-		if not l:
-			return self.setPronouns(argstring, sender)
-
-		return self.getPronouns("", sender)
+		return self.setPronouns(argstring, sender, True)
 
 	def deletePronouns(self, argstring, sender):
 		return 1
@@ -233,7 +242,7 @@ class GenderBot(object):
 
 	def returnGenericMessage(self, sender):
 		#return "Valid commands are **get**, **set**, **add**, **prefer**, **delete**, and **invite**.\n"\
-		return "Valid commands are `get`, `set`, and `invite`.\n"\
+		return "Valid commands are `get`, `set`, `add`, and `invite`.\n"\
 			"To learn more about a command, enter `<commandname> --help`"
 
 	def getUser(self, email, addIfNone=False):
