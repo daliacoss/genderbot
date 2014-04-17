@@ -92,34 +92,67 @@ class GenderBot(object):
 
 		if email == sender:
 			prefixes = ("You have", "Your")
+			suffix = "To set your pronouns, use the `set` command."
 		else:
 			prefixes = ("This user has", "This user's")
-
+			suffix = "You may invite this user by entering `invite " + email + "`."
 		try:
-			user, pronouns = self.session.query(models.User, models.UserPronounSet)\
+			users, pronouns = zip(*self.session.query(models.User, models.UserPronounSet)\
 				.filter(models.User.id==models.UserPronounSet.user_id)\
 				.filter(models.User.email==email)\
-				.all()
+				.all())
 		#if no records are found, we will get a ValueError for the unpack
 		except ValueError:
 		#if not len(pronouns):
-			return prefixes[0] + " not set any pronouns"
+			return prefixes[0] + " not set any pronouns. " + suffix
 
-		pronounStrings = [(' (preferred)'*p.preferred) + ': "{}","{}"",""{}","{}", and "{}"'.format(
+		pronounStrings = [(' (preferred)'*p.preferred) + ': "{}", "{}", "{}", "{}", and "{}"'.format(
 			p.p_nominative,
 			p.p_oblique,
 			p.p_possessive,
 			p.p_possessive_determiner,
-			p.p_reflective) for p in pronouns]
+			p.p_reflexive) for p in pronouns]
 		if len(pronounStrings) == 1:
-			fullString = prefixes(1) + " pronouns are " + pronounStrings[0]
+			fullString = prefixes[1] + " pronouns are " + pronounStrings[0]
 		else:
-			fullString = prefixes(1) + " pronouns are:\n" + "\n".join(
+			fullString = prefixes[1] + " pronouns are:\n" + "\n".join(
 				[str(i) + p for i, p in enumerate(pronounStrings)])
 		return fullString 
 
 	def setPronouns(self, argstring, sender):
-		return 1
+		usage = "Usage:\n"\
+			"`set [INDEX] <nominative>, <oblique>, <determiner>, <possessive>, <reflexive>`\n"\
+			"Example: `set they, them, their, theirs, themselves`\n"\
+			"INDEX is only required if you have added more than one pronoun set."
+		args = argstring.split(", ")
+		if argstring in ["", "--help"]:
+			return usage
+		#check if pronoun_set index is specified
+		elif args[0][0].isdigit():
+			try:
+				#try to split index from first pronoun arg
+				seploc = args[0].index(" ") #throws ValueError if none
+				index = args[0][:seploc]
+				args[0] = args[0][seploc+1:]
+			except ValueError:
+				#mark index as invalid/unspecified (index normally starts at 1)
+				index = 0
+		user = self.getUser(sender, True)
+		pronounSets = self.getUserPronounSets(user.id) #will be in order of user_id
+		l = len(pronounSets)
+		if l <= 1:
+			ps = models.UserPronounSet(
+				user.id, False,1,args[0],args[1],args[2],args[3],args[4]
+			)
+			if l:
+				pronounSets[0] = ps
+			else:
+				self.session.add(ps)
+			self.session.commit()
+		else:
+			pass
+
+		return self.getPronouns("", sender)
 
 	def invite(self, argstring, sender):
 		invitee = argstring
@@ -143,13 +176,13 @@ class GenderBot(object):
 		return 1
 
 	def unrecognized(self, sender):
-		user = None
-		#determine whether user has been welcomed
-		try:
-			user = self.session.query(models.User).filter_by(email=sender).one()
+		user = self.getUser(sender)
+		#determine whether user exists and has been welcomed
+		if user:
 			welcomed = user.welcomed
-		except exc.NoResultFound:
+		else:
 			welcomed = False
+
 		#if user has not been welcomed, return welcome message
 		#if user doesn't exist, also create user
 		if not welcomed:
@@ -160,20 +193,29 @@ class GenderBot(object):
 	def welcome(self, argstring, sender, user=None):
 		"""
 		send welcome message to user and set user.welcomed to True
-		if user is None, create new record
 		"""
+
 		if not user:
-			user = self.addUser(sender, True, False)
-		else:
-			user.welcomed = True
-			self.session.commit()
+			user = getUser(sender)
+		user.welcomed = True
+		self.session.commit()
 
 		msg = "Hello! I am a robot that can store your preferred gendered pronouns."
 		return "\n".join([msg, self.returnGenericMessage(sender)])
 
 	def returnGenericMessage(self, sender):
-		return "Valid commands are get, set, add, prefer, delete, and invite\n"\
+		#return "Valid commands are **get**, **set**, **add**, **prefer**, **delete**, and **invite**.\n"\
+		return "Valid commands are **get** and **set**.\n"\
 			"To learn more about a command, enter `<commandname> --help`"
+
+	def getUser(self, email, addIfNone=False):
+		"""get user by email; add record if user not found and addIfNone is True"""
+
+		try:
+			return self.session.query(models.User).filter_by(email=email).one()
+		except exc.NoResultFound:
+			if addIfNone:
+				return self.addUser(email, True, False)
 
 	def addUser(self, email, welcomed, invited):
 		user = models.User(email, welcomed, invited)
@@ -181,8 +223,14 @@ class GenderBot(object):
 			self.session.add(user)
 			self.session.commit()
 			return user
-		except exc.IntegriyError:
+		except exc.IntegrityError:
 			self.session.rollback()
+
+	def getUserPronounSets(self, user_id, sort=1):
+		q = self.session.query(models.UserPronounSet).filter_by(user_id=user_id)
+		if sort == 1:
+			q = q.order_by(models.UserPronounSet.user_id)
+		return q.all()
 
 	#def markUserAsWelcomed(self, email)
 

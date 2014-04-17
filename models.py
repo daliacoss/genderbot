@@ -21,25 +21,28 @@ class UserPronounSet(Base):
 	__tablename__ = 'user_pronoun_sets'
 	id = Column(Integer, primary_key=True)
 	user_id = Column(Integer, ForeignKey("users.id"))
+	relative_index = Column(Integer)
 	preferred = Column(Boolean)
 	p_nominative = Column(String(50))
 	p_oblique = Column(String(50))
 	p_possessive = Column(String(50))
 	p_possessive_determiner = Column(String(50))
-	p_reflective = Column(String(50))\
+	p_reflexive = Column(String(50))\
 
 	def __init__(self, user_id,
 		preferred,
+		relative_index,
 		p_nominative,
 		p_oblique,
 		p_possessive,
 		p_possessive_determiner,
-		p_reflective
+		p_reflexive
 	):
 		self.user_id = user_id
+		self.relative_index = relative_index
 		self.preferred = preferred
 		self.p_nominative = p_nominative
 		self.p_oblique = p_oblique
 		self.p_possessive = p_possessive
 		self.p_possessive_determiner = p_possessive_determiner
-		self.p_reflective = p_reflective
+		self.p_reflexive = p_reflexive
