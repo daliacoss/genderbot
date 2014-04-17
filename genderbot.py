@@ -113,13 +113,15 @@ class GenderBot(object):
 			p.p_possessive_determiner,
 			p.p_reflexive) for p in pronouns]
 		if len(pronounStrings) == 1:
-			fullString = prefixes[1] + " pronouns are " + pronounStrings[0]
+			fullString = prefixes[1] + " pronouns are" + pronounStrings[0]
 		else:
 			fullString = prefixes[1] + " pronouns are:\n" + "\n".join(
 				[str(i) + p for i, p in enumerate(pronounStrings)])
 		return fullString 
 
 	def setPronouns(self, argstring, sender):
+		"""set the user's pronouns"""
+
 		usage = "Usage:\n"\
 			"`set [INDEX] <nominative>, <oblique>, <determiner>, <possessive>, <reflexive>`\n"\
 			"Example: `set they, them, their, theirs, themselves`\n"\
@@ -140,34 +142,60 @@ class GenderBot(object):
 		user = self.getUser(sender, True)
 		pronounSets = self.getUserPronounSets(user.id) #will be in order of user_id
 		l = len(pronounSets)
+		ps = models.UserPronounSet(
+			user.id, False,1,args[0],args[1],args[2],args[3],args[4]
+		)
 		if l <= 1:
-			ps = models.UserPronounSet(
-				user.id, False,1,args[0],args[1],args[2],args[3],args[4]
-			)
 			if l:
 				pronounSets[0] = ps
 			else:
 				self.session.add(ps)
 			self.session.commit()
+		elif index < 1:
+			return "Error: You have multiple pronoun sets. Please specify an index.\n"\
+				+ self.getPronouns("", sender)
+		elif index > l:
+			return "Error: Invalid index." + self.getPronouns("", sender)
 		else:
-			pass
+			ps.relative_index = index
+			pronounSets[index] = ps
+			self.session.commit()
 
 		return self.getPronouns("", sender)
 
 	def invite(self, argstring, sender):
-		invitee = argstring
-		if sendInvitation(invitee):
-			return "You have successfully invited **" + invitee + "**."
-		else:
+		"""
+		send invitation to user, return True if success
+		"""
+
+		invitation = "Hello! You have been invited to register your preferred gender pronouns. "\
+			"You will only receive this invitation once.\n"
+		user = self.getUser(argstring, False)
+
+		#if user exists and has been invited
+		if user != None and user.invited:
 			return "This user has already been invited."
-
-	def sendInvitation(self, argstring):
-		"""send invitation to user, return True if success"""
-
-		return True
+		#if user doesn't exist or hasn't been invited, send invitation
+		m = Message("private", invitation + self.returnGenericMessage(""), argstring, "")
+		r = self.client.send_message(m.data)
+		if r.get("result") == "success":
+			if not user:
+				self.addUser(argstring, True, True)
+			else:
+				user.invited = user.welcomed = True
+				self.session.commit()
+			return "You have successfully invited **" + argstring + "**."
+		else:
+			return "Error: User not recognized."
 
 	def addPronouns(self, argstring, sender):
-		return 1
+		user = self.getUser(sender, True)
+		pronounSets = self.getUserPronounSets(user.id)
+		l = len(pronounSets)
+		if not l:
+			return self.setPronouns(argstring, sender)
+
+		return self.getPronouns("", sender)
 
 	def deletePronouns(self, argstring, sender):
 		return 1
@@ -205,7 +233,7 @@ class GenderBot(object):
 
 	def returnGenericMessage(self, sender):
 		#return "Valid commands are **get**, **set**, **add**, **prefer**, **delete**, and **invite**.\n"\
-		return "Valid commands are **get** and **set**.\n"\
+		return "Valid commands are `get`, `set`, and `invite`.\n"\
 			"To learn more about a command, enter `<commandname> --help`"
 
 	def getUser(self, email, addIfNone=False):
