@@ -129,8 +129,8 @@ class GenderBot(object):
 				"INDEX is only required if you have added more than one pronoun set."
 		else:
 			usage = "Usage:\n"\
-				"`add [INDEX] <nominative>, <oblique>, <determiner>, <possessive>, <reflexive>`\n"\
-				"Example: `set they, them, their, theirs, themselves`\n"
+				"`add <nominative>, <oblique>, <determiner>, <possessive>, <reflexive>`\n"\
+				"Example: `add they, them, their, theirs, themselves`\n"
 		args = argstring.split(", ")
 		index = 0
 		if argstring in ["", "--help"]:
@@ -146,7 +146,7 @@ class GenderBot(object):
 				args[0] = args[0][seploc+1:]
 			except ValueError:
 				#mark index as invalid/unspecified (index normally starts at 1)
-				index = 0
+				index = -1
 		user = self.getUser(sender, True)
 		pronounSets = self.getUserPronounSets(user.id) #will be in order of user_id
 		l = len(pronounSets)
@@ -166,14 +166,15 @@ class GenderBot(object):
 			else:
 				self.session.add(ps)
 			self.session.commit()
-		elif index < 1:
+		elif index < 0:
 			return "Error: You have multiple pronoun sets. Please specify an index.\n"\
 				+ self.getPronouns("", sender)
-		elif index >= l:
+		elif index > l or index < 0:
 			return "Error: Invalid index." + self.getPronouns("", sender)
 		else:
 			ps.relative_index = index
-			pronounSets[index] = ps
+			#indices start at one
+			pronounSets[index-1] = ps
 			self.session.commit()
 
 		return self.getPronouns("", sender)
@@ -233,7 +234,7 @@ class GenderBot(object):
 		"""
 
 		if not user:
-			user = getUser(sender)
+			user = self.getUser(sender)
 		user.welcomed = True
 		self.session.commit()
 
